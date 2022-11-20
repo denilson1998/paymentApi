@@ -13,6 +13,10 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Web;
+using paymentApi.Models.usersPayment;
+using paymentApi.Models.typeOfSubscription;
+using paymentApi.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace paymentApi.Controllers
 {
@@ -22,9 +26,14 @@ namespace paymentApi.Controllers
     {
         private IConfiguration configuration;
 
-        public AuthPaypalController(IConfiguration IConf)
+        private readonly dataContext _dataContext;
+        private string getTokenApproved;
+
+        public AuthPaypalController(IConfiguration IConf, dataContext dataContext)
         {
             this.configuration = IConf;
+            this._dataContext = dataContext;
+            this.getTokenApproved = "";
         }
 
         [HttpPost("post")]
@@ -61,6 +70,7 @@ namespace paymentApi.Controllers
                 if (token != null)
                 {
                     //var transactionHistoryUrl = "https://api-m.sandbox.paypal.com/v1/reporting/transactions?start_date=" + start_date + "&end_date=" + end_date + "&fields=all&pages"
+
                     return new JsonResult(token);
                 }
                 return new JsonResult("Pleasy Try again something getting problem!");    
@@ -72,8 +82,9 @@ namespace paymentApi.Controllers
             }
         }
 
+
         [HttpPost("paypalCreateOrder")]
-        public async Task<JsonResult> paypalCreateOrder(string priceSubscription)
+        public async Task<JsonResult> paypalCreateOrder(usersSubscriptionModel userSubscription)
         {
             try
             {
@@ -81,6 +92,7 @@ namespace paymentApi.Controllers
                 //string resp = string.Empty;
                 responseModel resp = new responseModel();
                 string approvalId = string.Empty;
+
 
                 using (HttpClient client = new HttpClient())
                 {
@@ -93,6 +105,29 @@ namespace paymentApi.Controllers
 
                     client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(authToken));
 
+                    typeOfSubscriptionModel subscriptionResp = await _dataContext.typesOfSubscriptions.FirstOrDefaultAsync(x => x.id == userSubscription.subscriptionId);
+
+                    usersSubscriptionModel userSubscriptionResp = await _dataContext.usersSubscription.FirstOrDefaultAsync(x => x.userId == userSubscription.userId);
+
+                    if ( userSubscriptionResp == null)
+                    {
+                        usersSubscriptionModel saveUserSubs = new usersSubscriptionModel();
+
+                        saveUserSubs.userId = userSubscription.userId;
+                        saveUserSubs.subscriptionId = userSubscription.subscriptionId;
+
+                        await _dataContext.usersSubscription.AddAsync(saveUserSubs);
+                        await _dataContext.SaveChangesAsync();
+
+                    }
+                    else
+                    {
+
+                        userSubscriptionResp.subscriptionId = subscriptionResp.id;
+                        await _dataContext.SaveChangesAsync();
+                    }
+                    
+
                     var order = new paypalOrderModel()
                     {
                         intent = "CAPTURE",
@@ -103,7 +138,7 @@ namespace paymentApi.Controllers
                                 amount = new AmountModel()
                                 {
                                     currency_code = "USD",
-                                    value = priceSubscription
+                                    value = Convert.ToString(subscriptionResp.price)
                                 }
                             }
                         },
@@ -113,7 +148,7 @@ namespace paymentApi.Controllers
                             landing_page = "LOGIN",
                             shipping_preference = "NO_SHIPPING",
                             user_action = "PAY_NOW",
-                            return_url = "https://youtube.com",
+                            return_url = "http://localhost:4200/home",
                             cancel_url = "https://google.com"
                         }
                     };
@@ -129,7 +164,7 @@ namespace paymentApi.Controllers
                     {
 
                         //var respOrderModel = JsonConvert.SerializeObject(resp);
-                        respOrderCreatedModel respOrderCreated = JsonConvert.DeserializeObject<respOrderCreatedModel>(response.Content.ReadAsStringAsync().Result);
+                        respOrderCreatedModel respOrderCreated =JsonConvert.DeserializeObject<respOrderCreatedModel>(response.Content.ReadAsStringAsync().Result); 
 
                         linksModel linkApproved = new linksModel();
 
@@ -142,9 +177,9 @@ namespace paymentApi.Controllers
                                 linkApproved.method = item.method;
                             }
                         }
-                        Uri url = new Uri(linkApproved.href);
+                        //Uri url = new Uri(linkApproved.href);
 
-                        string getTokenApproved = HttpUtility.ParseQueryString(url.Query).Get("token");
+                        //getTokenApproved = HttpUtility.ParseQueryString(url.Query).Get("token");
 
                         resp.estado = 1;
                         resp.mensaje = "Orden Creada Con Exito!";
@@ -157,7 +192,7 @@ namespace paymentApi.Controllers
                     {
                         resp.estado = 1;
                         resp.mensaje = "Error al Crear la Orden!";
-                        resp.detalle = null;
+                        resp.detalle = response.Content.ReadAsStringAsync().Result;
 
                         return new JsonResult(resp);
                     }
@@ -225,5 +260,7 @@ namespace paymentApi.Controllers
                 throw;
             }
         }
+
+
     }
 }
