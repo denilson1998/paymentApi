@@ -20,9 +20,17 @@ builder.Services.AddCors(options =>
       .AllowCredentials());
 });
 
+var dbHost = Environment.GetEnvironmentVariable("DB_HOST");
+var dbName = Environment.GetEnvironmentVariable("DB_NAME");
+var dbPassword = Environment.GetEnvironmentVariable("DB_SA_PASSWORD");
+var connectionString = $"Data Source={dbHost};Initial Catalog={dbName};User ID=sa;Password={dbPassword};TrustServerCertificate=true";
+//builder.Services.AddDbContext<dataContext>(options =>
+//    options.UseSqlServer(builder.Configuration.GetConnectionString("connection"))
+//);
 builder.Services.AddDbContext<dataContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("connection"))
+    options.UseSqlServer(connectionString)
 );
+
 
 var app = builder.Build();
 

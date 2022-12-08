@@ -1,0 +1,43 @@
+version: '3.4'
+
+#services:
+#  paymentapi:
+#    image: ${DOCKER_REGISTRY-}paymentapi
+#    build:
+#      context: .
+#      dockerfile: paymentApi/Dockerfile
+networks:
+  payment_app:
+    driver: bridge
+
+services:
+    paymentdb:
+        container_name: paymentDb
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        restart: always
+        ports:
+            - 8002:1433
+        environment:
+            - ACCEPT_EULA=Y
+            - MSSQL_SA_PASSWORD=password@12345
+        #volumes:
+        #  - ./postgres:/var/lib/postgresql/data
+        networks:
+            - payment_app
+        
+    paymentapi:
+        container_name: paymentapi
+        image: ${DOCKER_REGISTRY-}paymentapi
+        build:
+          context: .
+          dockerfile: paymentApi/Dockerfile
+        ports:
+          - 8001:80
+        depends_on:
+          - paymentdb
+        environment:
+          - DB_HOST=paymentdb
+          - DB_NAME=paymentDb
+          - DB_SA_PASSWORD=password@12345
+        networks:
+          - payment_app
